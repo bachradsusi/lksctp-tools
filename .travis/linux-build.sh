@@ -30,7 +30,8 @@ function __prep_kernel()
 {
 	make mrproper
 	make allmodconfig
-	sed /CONFIG_RETPOLINE/d .config
+	sed -i 's/CONFIG_RETPOLINE=/# CONFIG_RETPOLINE is not set/' .config
+	make oldconfig
 	make -j $nproc modules_prepare
 	make -j $nproc headers_install
 	KERNEL_HEADERS=$(pwd)/usr/include
@@ -56,6 +57,8 @@ function download_prep_kernel()
 
 function build_lksctp()
 {
+	local use_builddir="$1"
+
 	make distclean || :
 	./bootstrap
 
@@ -64,12 +67,23 @@ function build_lksctp()
 		CFLAGS="$CFLAGS -I$KERNEL_HEADERS"
 	fi
 	export CFLAGS
-	./configure
+
+	if [ "$use_builddir" == 1 ]; then
+		mkdir build
+		pushd build
+		../configure
+	else
+		./configure
+	fi
 
 	make -j $nproc
 
 	#make -j $nproc distcheck
 
+	if [ "$use_builddir" == 1 ]; then
+		popd
+		rm -rf build
+	fi
 }
 
 trap cleanup EXIT
@@ -79,9 +93,11 @@ if [ -z "$KERNEL" ]; then
 	for ver in $VERS; do
 		git_prep_kernel "$ver"
 		build_lksctp
+		build_lksctp 1
 	done
 else
 	download_kernel "$KERNEL"
 	download_prep_kernel "$KERNEL"
 	build_lksctp
+	build_lksctp 1
 fi
